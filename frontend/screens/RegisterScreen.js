@@ -3,24 +3,62 @@ import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, KeyboardAvo
 import axios from 'axios';
 import { useTheme } from '../ThemeContext';
 
-export default function RegisterScreen({ navigation }) {
+export default function RegisterScreen({ navigation, onLogin }) {
   const { accentColor, backgroundColor } = useTheme();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
+    // Clear any previous errors
+    setError('');
+    
     if (!name || !email || !password) {
-      Alert.alert('Missing info', 'Please fill in all fields');
+      const errorMsg = 'Please fill in all fields';
+      setError(errorMsg);
+      Alert.alert('Missing info', errorMsg);
       return;
     }
+    
+    setLoading(true);
     try {
-      await axios.post('/api/register', { name, email, password });
-      Alert.alert('Success', 'Registration complete. You can now log in.');
-      navigation.goBack();
+      console.log('Attempting registration for:', email);
+      const res = await axios.post('/auth/register', { name, email, password });
+      console.log('Registration response:', res.data);
+      // Automatically log in the user after successful registration
+      if (onLogin && res.data && res.data.user) {
+        onLogin(res.data.user);
+      } else {
+        Alert.alert('Success', 'Registration complete. You can now log in.');
+        navigation.goBack();
+      }
     } catch (err) {
-      console.error(err);
-      Alert.alert('Registration Failed', err.response?.data?.message || 'An error occurred');
+      console.error('Registration error:', err);
+      console.error('Error response:', err.response?.data);
+      console.error('Error status:', err.response?.status);
+      
+      // Determine error message
+      let errorMessage = 'An error occurred';
+      if (err.code === 'ECONNREFUSED' || err.message?.includes('Network Error')) {
+        errorMessage = 'Cannot connect to server. Please check if the backend is running.';
+      } else if (err.response?.status === 409) {
+        errorMessage = err.response?.data?.error || 'An account with this email already exists.';
+      } else if (err.response?.status === 400) {
+        errorMessage = err.response?.data?.error || 'Invalid request. Please check your input.';
+      } else if (err.response?.data?.error) {
+        errorMessage = err.response.data.error;
+      } else if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
+      Alert.alert('Registration Failed', errorMessage);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -73,11 +111,24 @@ export default function RegisterScreen({ navigation }) {
               />
             </View>
 
+            {error ? (
+              <View style={styles.errorContainer}>
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            ) : null}
+
             <TouchableOpacity 
-              style={[styles.registerButton, { backgroundColor: accentColor, shadowColor: accentColor }]} 
+              style={[
+                styles.registerButton, 
+                { backgroundColor: accentColor, shadowColor: accentColor },
+                loading && styles.registerButtonDisabled
+              ]} 
               onPress={handleRegister}
+              disabled={loading}
             >
-              <Text style={styles.registerButtonText}>Create Account</Text>
+              <Text style={styles.registerButtonText}>
+                {loading ? 'Creating Account...' : 'Create Account'}
+              </Text>
             </TouchableOpacity>
           </View>
 
@@ -178,5 +229,23 @@ const styles = StyleSheet.create({
   link: {
     fontSize: 15,
     fontWeight: '600',
+  },
+  errorContainer: {
+    marginTop: 8,
+    marginBottom: 8,
+    padding: 12,
+    backgroundColor: '#7F1D1D',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#991B1B',
+  },
+  errorText: {
+    color: '#FCA5A5',
+    fontSize: 14,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  registerButtonDisabled: {
+    opacity: 0.6,
   },
 });

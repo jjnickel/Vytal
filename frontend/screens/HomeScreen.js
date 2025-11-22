@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../ThemeContext';
 import { useNutritionGoals } from '../NutritionGoalsContext';
 
@@ -46,10 +47,18 @@ export default function HomeScreen({ user }) {
   };
 
   return (
-    <ScrollView 
-      style={[styles.container, { backgroundColor }]} 
-      contentContainerStyle={styles.contentContainer}
-    >
+    <View style={[styles.container, { backgroundColor }]}>
+      {/* Top Banner */}
+      <View style={styles.topBanner}>
+        <Image
+          source={require('../assets/logo2.png')}
+          style={styles.bannerLogo}
+          resizeMode="contain"
+        />
+      </View>
+      <ScrollView 
+        contentContainerStyle={styles.contentContainer}
+      >
       <View style={styles.header}>
         <Text style={styles.greeting}>Welcome back{user?.name ? `, ${user.name.split(' ')[0]}` : ''}!</Text>
         <Text style={styles.subtitle}>Here's your fitness overview</Text>
@@ -126,22 +135,111 @@ export default function HomeScreen({ user }) {
       {/* Quick Action Button */}
       <TouchableOpacity 
         style={[styles.trainingButton, { backgroundColor: accentColor, shadowColor: accentColor }]}
-        onPress={() => navigation.navigate('Training')}
+        onPress={() => navigation.navigate('Main', { screen: 'Training' })}
       >
         <Text style={styles.trainingButtonText}>Start Workout</Text>
       </TouchableOpacity>
-    </ScrollView>
+      </ScrollView>
+      <BottomTabBar navigation={navigation} accentColor={accentColor} />
+    </View>
+  );
+}
+
+// Bottom Tab Bar Component
+function BottomTabBar({ navigation, accentColor }) {
+  const tabs = [
+    { name: 'Training', icon: 'barbell-outline', route: 'Main', tabName: 'Training' },
+    { name: 'Nutrition', icon: 'nutrition-outline', route: 'Main', tabName: 'Nutrition' },
+    { name: 'PersonalTrainer', icon: 'fitness', route: 'Main', tabName: 'PersonalTrainer' },
+    { name: 'Health', icon: 'heart-outline', route: 'Main', tabName: 'Health' },
+    { name: 'Profile', icon: 'person-outline', route: 'Main', tabName: 'Profile' },
+  ];
+
+  const handleTabPress = (tab) => {
+    // Navigate to Main tabs and then to the specific tab
+    navigation.navigate('Main', { 
+      screen: tab.tabName 
+    });
+  };
+
+  return (
+    <View style={styles.bottomTabBar}>
+      {tabs.map((tab, index) => {
+        const isPersonalTrainer = tab.name === 'PersonalTrainer';
+        const isActive = false; // Home is not a tab, so none are active
+        
+        if (isPersonalTrainer) {
+          return (
+            <TouchableOpacity
+              key={tab.name}
+              style={styles.tabButton}
+              onPress={() => handleTabPress(tab)}
+            >
+              <View
+                style={[
+                  styles.personalTrainerTab,
+                  {
+                    backgroundColor: '#374151',
+                  },
+                ]}
+              >
+                <Image
+                  source={require('../assets/logo.png')}
+                  style={{
+                    width: 56,
+                    height: 56,
+                    resizeMode: 'cover',
+                  }}
+                />
+              </View>
+            </TouchableOpacity>
+          );
+        }
+        
+        return (
+          <TouchableOpacity
+            key={tab.name}
+            style={styles.tabButton}
+            onPress={() => handleTabPress(tab)}
+          >
+            <Ionicons name={tab.icon} size={24} color="#9CA3AF" />
+            <Text style={styles.tabLabel}>{tab.name}</Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    padding: 20,
+    paddingTop: 40,
+  },
+  topBanner: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 60,
+    backgroundColor: '#1F2937',
+    borderBottomWidth: 1,
+    borderBottomColor: '#374151',
+    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
+    paddingRight: 20,
+    paddingBottom: 10,
+    zIndex: 5,
+  },
+  bannerLogo: {
+    width: 120,
+    height: 40,
   },
   contentContainer: {
     padding: 20,
-    paddingTop: 40,
-    paddingBottom: 40,
+    paddingTop: 80, // Space for banner (60px) + spacing
+    paddingBottom: 100, // Extra padding for bottom tab bar
   },
   header: {
     marginBottom: 24,
@@ -284,6 +382,43 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     letterSpacing: 0.8,
+  },
+  bottomTabBar: {
+    flexDirection: 'row',
+    backgroundColor: '#1F2937',
+    borderTopWidth: 1,
+    borderTopColor: '#374151',
+    height: 70, // Match the Personal Trainer tab height
+    paddingTop: 5,
+    paddingBottom: 8, // Extra padding for Personal Trainer tab
+    justifyContent: 'space-around',
+    alignItems: 'center',
+  },
+  tabButton: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+  },
+  tabLabel: {
+    fontSize: 10,
+    color: '#9CA3AF',
+    marginTop: 4,
+    fontWeight: '500',
+  },
+  personalTrainerTab: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: -8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 6,
+    overflow: 'hidden',
   },
 });
 

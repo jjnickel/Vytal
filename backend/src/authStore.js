@@ -3,11 +3,13 @@
 
 const users = []; // { id, name, email, passwordHash }
 
-export function findUserByEmail(email) {
+function findUserByEmail(email) {
   return users.find(u => u.email.toLowerCase() === email.toLowerCase());
 }
 
-export function addUser(user) {
+function addUser(user) {
   users.push(user);
   return user;
 }
+
+module.exports = { findUserByEmail, addUser };

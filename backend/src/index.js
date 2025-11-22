@@ -26,6 +26,7 @@ const dotenv = require('dotenv');
 dotenv.config();
 
 const { generateWorkoutPlan } = require('./services/workout');
+const authRouter = require('./routes/auth');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -33,6 +34,14 @@ const PORT = process.env.PORT || 3000;
 // Use CORS to allow the React Native client to connect
 app.use(cors());
 app.use(bodyParser.json());
+
+// Request logging middleware
+app.use((req, res, next) => {
+  console.log(`${req.method} ${req.path}`, req.body ? JSON.stringify(req.body) : '');
+  next();
+});
+
+app.use('/auth', authRouter);
 
 // In‑memory data stores for this prototype. In production you would
 // replace these with persistent storage such as PostgreSQL via Prisma.
@@ -122,6 +131,19 @@ app.post('/api/nutrition/estimate', (req, res) => {
   res.json({ estimate });
 });
 
-app.listen(PORT, () => {
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', message: 'Backend is running', port: PORT });
+});
+
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`AI Fitness backend listening on port ${PORT}`);
+  console.log(`Server accessible at:`);
+  console.log(`  - http://localhost:${PORT}`);
+  console.log(`  - http://127.0.0.1:${PORT}`);
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', message: 'Backend is running', port: PORT });
 });

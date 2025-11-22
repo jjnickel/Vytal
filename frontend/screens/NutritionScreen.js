@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, FlatList, Modal, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, FlatList, Modal, Alert, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../ThemeContext';
 import { useNutritionGoals } from '../NutritionGoalsContext';
 
@@ -31,6 +32,7 @@ const FOOD_DATABASE = [
 export default function NutritionScreen() {
   const { accentColor, backgroundColor } = useTheme();
   const { goals: DAILY_GOALS } = useNutritionGoals();
+  const navigation = useNavigation();
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [selectedFoods, setSelectedFoods] = useState([]);
@@ -195,6 +197,22 @@ export default function NutritionScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor }]}>
+      {/* Top Banner */}
+      <View style={styles.topBanner}>
+        <Image
+          source={require('../assets/logo2.png')}
+          style={styles.bannerLogo}
+          resizeMode="contain"
+        />
+      </View>
+      <View style={styles.homeButtonWrapper}>
+        <TouchableOpacity
+          style={[styles.homeButton, { backgroundColor: '#1F2937', borderColor: accentColor }]}
+          onPress={() => navigation.navigate('Home')}
+        >
+          <Ionicons name="home" size={20} color={accentColor} />
+        </TouchableOpacity>
+      </View>
       <ScrollView 
         style={styles.scrollView}
         contentContainerStyle={styles.contentContainer}
@@ -533,12 +551,48 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  topBanner: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 60,
+    backgroundColor: '#1F2937',
+    borderBottomWidth: 1,
+    borderBottomColor: '#374151',
+    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
+    paddingRight: 20,
+    paddingBottom: 10,
+    zIndex: 5,
+  },
+  bannerLogo: {
+    width: 120,
+    height: 40,
+  },
+  homeButtonWrapper: {
+    position: 'absolute',
+    top: 50,
+    left: 10,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+  },
+  homeButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    backgroundColor: '#1F2937',
+  },
   scrollView: {
     flex: 1,
   },
   contentContainer: {
     padding: 20,
-    paddingTop: 40,
+    paddingTop: 80, // Space for banner (60px) + spacing
     paddingBottom: 40,
   },
   header: {

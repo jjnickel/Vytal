@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, TextInput, FlatList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, TextInput, FlatList, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import axios from 'axios';
 import { useTheme } from '../ThemeContext';
 import { useWorkout } from '../WorkoutContext';
@@ -36,6 +37,7 @@ const EXERCISE_DATABASE = [
 export default function TrainingScreen({ user }) {
   const { accentColor, backgroundColor } = useTheme();
   const { addPastWorkout } = useWorkout();
+  const navigation = useNavigation();
   const [plan, setPlan] = useState(null);
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState('generate'); // 'generate' or 'custom'
@@ -144,6 +146,22 @@ export default function TrainingScreen({ user }) {
 
   return (
     <View style={[styles.container, { backgroundColor }]}>
+      {/* Top Banner */}
+      <View style={styles.topBanner}>
+        <Image
+          source={require('../assets/logo2.png')}
+          style={styles.bannerLogo}
+          resizeMode="contain"
+        />
+      </View>
+      <View style={styles.homeButtonWrapper}>
+        <TouchableOpacity
+          style={[styles.homeButton, { backgroundColor: '#1F2937', borderColor: accentColor }]}
+          onPress={() => navigation.navigate('Home')}
+        >
+          <Ionicons name="home" size={20} color={accentColor} />
+        </TouchableOpacity>
+      </View>
       <View style={styles.header}>
         <Text style={styles.title}>Training Plan</Text>
         <Text style={styles.subtitle}>Your personalized workout routine</Text>
@@ -386,8 +404,45 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingTop: 40,
   },
+  topBanner: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 60,
+    backgroundColor: '#1F2937',
+    borderBottomWidth: 1,
+    borderBottomColor: '#374151',
+    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
+    paddingRight: 20,
+    paddingBottom: 10,
+    zIndex: 5,
+  },
+  bannerLogo: {
+    width: 120,
+    height: 40,
+  },
+  homeButtonWrapper: {
+    position: 'absolute',
+    top: 50,
+    left: 10,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+  },
+  homeButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    backgroundColor: '#1F2937',
+  },
   header: {
     marginBottom: 24,
+    marginTop: 80, // Space for banner (60px) + spacing
   },
   title: {
     fontSize: 36,

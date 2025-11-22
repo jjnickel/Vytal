@@ -1,7 +1,7 @@
-import express from 'express';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import { findUserByEmail, addUser } from '../authStore.js';
+const express = require('express');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const { findUserByEmail, addUser } = require('../authStore');
 
 const router = express.Router();
 
@@ -16,14 +16,17 @@ function signToken(user) {
 // POST /auth/register
 router.post('/register', async (req, res) => {
   try {
+    console.log('Register endpoint hit:', req.body);
     const { name, email, password } = req.body || {};
 
     if (!name || !email || !password) {
+      console.log('Missing fields in register request');
       return res.status(400).json({ error: 'Name, email, and password are required.' });
     }
 
     const existing = findUserByEmail(email);
     if (existing) {
+      console.log('User already exists:', email);
       return res.status(409).json({ error: 'User already exists with this email.' });
     }
 
@@ -36,6 +39,7 @@ router.post('/register', async (req, res) => {
     };
 
     addUser(newUser);
+    console.log('User registered successfully:', email);
 
     const token = signToken(newUser);
     res.status(201).json({
@@ -55,22 +59,27 @@ router.post('/register', async (req, res) => {
 // POST /auth/login
 router.post('/login', async (req, res) => {
   try {
+    console.log('Login endpoint hit:', req.body);
     const { email, password } = req.body || {};
 
     if (!email || !password) {
+      console.log('Missing fields in login request');
       return res.status(400).json({ error: 'Email and password are required.' });
     }
 
     const user = findUserByEmail(email);
     if (!user) {
+      console.log('User not found:', email);
       return res.status(401).json({ error: 'Invalid credentials.' });
     }
 
     const ok = await bcrypt.compare(password, user.passwordHash);
     if (!ok) {
+      console.log('Invalid password for:', email);
       return res.status(401).json({ error: 'Invalid credentials.' });
     }
 
+    console.log('Login successful for:', email);
     const token = signToken(user);
     res.json({
       token,
@@ -86,4 +95,4 @@ router.post('/login', async (req, res) => {
   }
 });
 
-export default router;
+module.exports = router;

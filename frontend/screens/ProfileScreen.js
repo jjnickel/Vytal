@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../ThemeContext';
 import { useWorkout } from '../WorkoutContext';
 import { useNutritionGoals } from '../NutritionGoalsContext';
@@ -9,6 +10,7 @@ export default function ProfileScreen({ user }) {
   const { accentColor, setAccentColor, accentColors, backgroundColor, setBackgroundColor, backgroundColors } = useTheme();
   const { pastWorkouts } = useWorkout();
   const { goals, updateGoals } = useNutritionGoals();
+  const navigation = useNavigation();
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showBackgroundColorPicker, setShowBackgroundColorPicker] = useState(false);
   const [showGoalsEditor, setShowGoalsEditor] = useState(false);
@@ -43,13 +45,30 @@ export default function ProfileScreen({ user }) {
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor }]} contentContainerStyle={styles.contentContainer}>
-      <View style={styles.header}>
-        <Text style={styles.title}>Profile</Text>
-        <Text style={styles.subtitle}>Manage your account and preferences</Text>
+    <View style={[styles.container, { backgroundColor }]}>
+      {/* Top Banner */}
+      <View style={styles.topBanner}>
+        <Image
+          source={require('../assets/logo2.png')}
+          style={styles.bannerLogo}
+          resizeMode="contain"
+        />
       </View>
+      <View style={styles.homeButtonWrapper}>
+        <TouchableOpacity
+          style={[styles.homeButton, { backgroundColor: '#1F2937', borderColor: accentColor }]}
+          onPress={() => navigation.navigate('Home')}
+        >
+          <Ionicons name="home" size={20} color={accentColor} />
+        </TouchableOpacity>
+      </View>
+      <ScrollView contentContainerStyle={styles.contentContainer}>
+        <View style={styles.header}>
+          <Text style={styles.title}>Profile</Text>
+          <Text style={styles.subtitle}>Manage your account and preferences</Text>
+        </View>
 
-      {user ? (
+        {user ? (
         <View style={styles.profileSection}>
           <View style={styles.profileCard}>
             <View style={styles.avatarContainer}>
@@ -67,9 +86,9 @@ export default function ProfileScreen({ user }) {
         <View style={styles.profileCard}>
           <Text style={styles.noUserText}>Not logged in</Text>
         </View>
-      )}
+        )}
 
-      <View style={styles.settingsSection}>
+        <View style={styles.settingsSection}>
         <Text style={styles.sectionTitle}>Nutrition Goals</Text>
         
         <TouchableOpacity 
@@ -155,9 +174,9 @@ export default function ProfileScreen({ user }) {
             </View>
           </View>
         )}
-      </View>
+        </View>
 
-      <View style={styles.settingsSection}>
+        <View style={styles.settingsSection}>
         <Text style={styles.sectionTitle}>Appearance</Text>
         
         <TouchableOpacity 
@@ -243,9 +262,9 @@ export default function ProfileScreen({ user }) {
             </View>
           </View>
         )}
-      </View>
+        </View>
 
-      <View style={styles.workoutsSection}>
+        <View style={styles.workoutsSection}>
         <Text style={styles.sectionTitle}>Past Workouts</Text>
         
         {pastWorkouts.length === 0 ? (
@@ -299,17 +318,18 @@ export default function ProfileScreen({ user }) {
             </View>
           ))
         )}
-      </View>
+        </View>
 
-      <View style={styles.actionsSection}>
+        <View style={styles.actionsSection}>
         <TouchableOpacity 
           style={[styles.logoutButton, { borderColor: accentColor }]} 
           onPress={handleLogout}
         >
           <Text style={[styles.logoutButtonText, { color: accentColor }]}>Logout</Text>
         </TouchableOpacity>
-      </View>
-    </ScrollView>
+        </View>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -317,13 +337,50 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  topBanner: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 60,
+    backgroundColor: '#1F2937',
+    borderBottomWidth: 1,
+    borderBottomColor: '#374151',
+    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
+    paddingRight: 20,
+    paddingBottom: 10,
+    zIndex: 5,
+  },
+  bannerLogo: {
+    width: 120,
+    height: 40,
+  },
+  homeButtonWrapper: {
+    position: 'absolute',
+    top: 50,
+    left: 10,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+  },
+  homeButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    backgroundColor: '#1F2937',
+  },
   contentContainer: {
     padding: 20,
-    paddingTop: 40,
+    paddingTop: 80, // Space for banner (60px) + spacing
     paddingBottom: 40,
   },
   header: {
     marginBottom: 32,
+    marginTop: 10,
   },
   title: {
     fontSize: 36,

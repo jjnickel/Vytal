@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TextInput, TouchableOpacity, Alert, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../ThemeContext';
 import { useWeight } from '../WeightContext';
 
 export default function HealthScreen() {
   const { accentColor, backgroundColor } = useTheme();
   const { weightEntries, addWeightEntry } = useWeight();
+  const navigation = useNavigation();
   const [weightInput, setWeightInput] = useState('');
   const [showWeightInput, setShowWeightInput] = useState(false);
 
@@ -35,11 +37,10 @@ export default function HealthScreen() {
   // Line graph component
   const WeightGraph = () => {
     if (weightEntries.length === 0) return null;
+    const [graphDimensions, setGraphDimensions] = useState({ width: 0, height: 0 });
 
     const graphHeight = 200;
     const graphPadding = 20;
-    const graphAreaHeight = graphHeight - graphPadding * 2;
-    const graphAreaWidth = '100%';
 
     // Get min and max weights for scaling (add padding)
     const weights = weightEntries.map(e => e.weight);
@@ -50,9 +51,9 @@ export default function HealthScreen() {
     const adjustedMaxWeight = maxWeight + weightPadding;
     const weightRange = adjustedMaxWeight - adjustedMinWeight || 10;
 
-    // Calculate points in pixels
+    // Calculate points in percentages
     const points = weightEntries.map((entry, index) => {
-      const xPercent = (index / (weightEntries.length - 1 || 1)) * 100;
+      const xPercent = weightEntries.length === 1 ? 50 : (index / (weightEntries.length - 1)) * 100;
       const yPercent = 100 - (((entry.weight - adjustedMinWeight) / weightRange) * 100);
       return { 
         xPercent, 
@@ -63,34 +64,48 @@ export default function HealthScreen() {
       };
     });
 
-    // Create gradient fill - simpler approach with segments
-    const gradientLayers = [];
-    for (let i = 0; i < points.length - 1; i++) {
-      const p1 = points[i];
-      const p2 = points[i + 1];
-      const topY = Math.min(p1.yPercent, p2.yPercent);
-      const bottomY = 100;
-      const height = bottomY - topY;
+    // Create gradient fill area under the line using vertical strips
+    // Each strip follows the line curve and has gradient opacity
+    const gradientStrips = [];
+    const numStrips = 100; // More strips = smoother gradient
+    
+    for (let strip = 0; strip < numStrips; strip++) {
+      const xPercent = (strip / (numStrips - 1)) * 100;
       
-      // Create gradient effect with multiple opacity layers
-      const numGradientSteps = 8;
-      for (let step = 0; step < numGradientSteps; step++) {
-        const stepHeight = height / numGradientSteps;
-        const stepTop = topY + (step * stepHeight);
-        const opacity = 0.4 * (1 - (step / numGradientSteps));
+      // Find which line segment this strip belongs to
+      let segmentIndex = 0;
+      for (let i = 0; i < points.length - 1; i++) {
+        if (xPercent >= points[i].xPercent && xPercent <= points[i + 1].xPercent) {
+          segmentIndex = i;
+          break;
+        }
+      }
+      
+      // Interpolate y position along the line at this x position
+      const p1 = points[segmentIndex];
+      const p2 = points[Math.min(segmentIndex + 1, points.length - 1)];
+      const t = p1.xPercent === p2.xPercent ? 0 : (xPercent - p1.xPercent) / (p2.xPercent - p1.xPercent);
+      const lineYPercent = p1.yPercent + (p2.yPercent - p1.yPercent) * t;
+      
+      // Create vertical gradient strips with decreasing opacity from line to bottom
+      const numGradientLayers = 15;
+      for (let layer = 0; layer < numGradientLayers; layer++) {
+        const layerHeight = (100 - lineYPercent) / numGradientLayers;
+        const layerTop = lineYPercent + (layer * layerHeight);
+        // Opacity decreases from top (near line) to bottom
+        const layerOpacity = 0.3 * (1 - layer / numGradientLayers);
         
-        gradientLayers.push(
+        gradientStrips.push(
           <View
-            key={`gradient-${i}-${step}`}
+            key={`gradient-strip-${strip}-${layer}`}
             style={[
-              styles.gradientLayer,
+              styles.gradientStrip,
               {
-                left: `${p1.xPercent}%`,
-                width: `${p2.xPercent - p1.xPercent}%`,
-                top: `${stepTop}%`,
-                height: `${stepHeight}%`,
-                opacity: Math.max(0.05, opacity),
+                left: `${xPercent}%`,
+                top: `${layerTop}%`,
+                height: `${layerHeight}%`,
                 backgroundColor: accentColor,
+                opacity: layerOpacity,
               },
             ]}
           />
@@ -115,39 +130,51 @@ export default function HealthScreen() {
           </View>
           
           {/* Graph area */}
-          <View style={styles.graphArea}>
+          <View 
+            style={styles.graphArea}
+            onLayout={(event) => {
+              const { width, height } = event.nativeEvent.layout;
+              setGraphDimensions({ width, height });
+            }}
+          >
             {/* Grid lines */}
             <View style={styles.gridLine} />
             <View style={[styles.gridLine, { top: '50%' }]} />
             <View style={[styles.gridLine, { top: '100%' }]} />
             
-            {/* Gradient fill under the line */}
-            <View style={styles.gradientContainer}>
-              {gradientLayers}
+            {/* Gradient fill area under the line */}
+            <View style={styles.fillContainer}>
+              {gradientStrips}
             </View>
             
-            {/* Line graph - using absolute positioning with proper calculations */}
+            {/* Line graph - connecting the dots exactly from point to point */}
             <View style={styles.lineContainer}>
-              {points.map((point, index) => {
+              {graphDimensions.width > 0 && graphDimensions.height > 0 && points.map((point, index) => {
                 if (index === 0) return null;
                 const prevPoint = points[index - 1];
                 
-                // Calculate line segment using distance and angle
-                const dx = point.xPercent - prevPoint.xPercent;
-                const dy = point.yPercent - prevPoint.yPercent;
+                // Convert percentages to pixels
+                const graphAreaWidth = graphDimensions.width;
+                const graphAreaHeight = graphDimensions.height;
+                
+                const x1 = (prevPoint.xPercent / 100) * graphAreaWidth;
+                const y1 = (prevPoint.yPercent / 100) * graphAreaHeight;
+                const x2 = (point.xPercent / 100) * graphAreaWidth;
+                const y2 = (point.yPercent / 100) * graphAreaHeight;
+                
+                // Calculate line segment
+                const dx = x2 - x1;
+                const dy = y2 - y1;
                 const length = Math.sqrt(dx * dx + dy * dy);
                 const angle = Math.atan2(dy, dx) * (180 / Math.PI);
                 
-                // Position line at the start point
-                // Calculate the offset needed so rotation happens around the start point
-                const offsetX = -length / 2;
-                const offsetY = 0;
+                // Position line so it starts at (x1, y1) and ends at (x2, y2)
+                // Center is at midpoint
+                const centerX = (x1 + x2) / 2;
+                const centerY = (y1 + y2) / 2;
                 
-                // After rotation, adjust position to account for the offset
-                const cosAngle = Math.cos(angle * Math.PI / 180);
-                const sinAngle = Math.sin(angle * Math.PI / 180);
-                const adjustedX = prevPoint.xPercent + (offsetX * cosAngle - offsetY * sinAngle);
-                const adjustedY = prevPoint.yPercent + (offsetX * sinAngle + offsetY * cosAngle);
+                // Position the line's left edge so center is at midpoint
+                const lineLeft = centerX - (length / 2);
                 
                 return (
                   <View
@@ -155,9 +182,10 @@ export default function HealthScreen() {
                     style={[
                       styles.lineSegment,
                       {
-                        left: `${adjustedX}%`,
-                        top: `${adjustedY}%`,
-                        width: `${length}%`,
+                        left: lineLeft,
+                        top: centerY,
+                        width: length,
+                        marginTop: -1.5, // Center vertically (line height is 3px)
                         transform: [{ rotate: `${angle}deg` }],
                         backgroundColor: accentColor,
                       },
@@ -214,8 +242,25 @@ export default function HealthScreen() {
   );
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor }]} contentContainerStyle={styles.contentContainer}>
-      <View style={styles.header}>
+    <View style={[styles.container, { backgroundColor }]}>
+      {/* Top Banner */}
+      <View style={styles.topBanner}>
+        <Image
+          source={require('../assets/logo2.png')}
+          style={styles.bannerLogo}
+          resizeMode="contain"
+        />
+      </View>
+      <View style={styles.homeButtonWrapper}>
+        <TouchableOpacity
+          style={[styles.homeButton, { backgroundColor: '#1F2937', borderColor: accentColor }]}
+          onPress={() => navigation.navigate('Home')}
+        >
+          <Ionicons name="home" size={20} color={accentColor} />
+        </TouchableOpacity>
+      </View>
+      <ScrollView contentContainerStyle={styles.contentContainer}>
+        <View style={styles.header}>
         <Text style={styles.title}>Health Summary</Text>
         <Text style={styles.subtitle}>Your wellness metrics at a glance</Text>
       </View>
@@ -304,6 +349,7 @@ export default function HealthScreen() {
         />
       </View>
     </ScrollView>
+    </View>
   );
 }
 
@@ -312,11 +358,53 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   contentContainer: {
+    paddingBottom: 20,
+    paddingTop: 80, // Space for banner (60px) + spacing
+    paddingHorizontal: 10,
+  },
+  topBanner: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 60,
+    backgroundColor: '#1F2937',
+    borderBottomWidth: 1,
+    borderBottomColor: '#374151',
+    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
+    paddingRight: 20,
+    paddingBottom: 10,
+    zIndex: 5,
+  },
+  bannerLogo: {
+    width: 120,
+    height: 40,
+  },
+  homeButtonWrapper: {
+    position: 'absolute',
+    top: 50,
+    left: 10,
+    zIndex: 10,
+    width: 44,
+    height: 44,
+  },
+  homeButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    backgroundColor: '#1F2937',
+  },
+  contentContainer: {
     padding: 20,
     paddingTop: 40,
   },
   header: {
     marginBottom: 32,
+    marginTop: 10,
   },
   title: {
     fontSize: 36,
@@ -509,7 +597,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#374151',
     opacity: 0.5,
   },
-  gradientContainer: {
+  fillContainer: {
     position: 'absolute',
     left: 0,
     top: 0,
@@ -519,9 +607,9 @@ const styles = StyleSheet.create({
     height: '100%',
     zIndex: 0,
   },
-  gradientLayer: {
+  gradientStrip: {
     position: 'absolute',
-    bottom: 0,
+    width: `${100 / 100}%`, // Width of each strip (1% for 100 strips)
   },
   lineContainer: {
     position: 'absolute',
@@ -538,6 +626,7 @@ const styles = StyleSheet.create({
     height: 3,
     borderRadius: 1.5,
     marginTop: -1.5, // Center the line vertically on the point
+    marginLeft: 0,
   },
   dataPoint: {
     position: 'absolute',

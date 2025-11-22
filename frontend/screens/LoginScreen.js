@@ -7,18 +7,57 @@ export default function LoginScreen({ navigation, onLogin }) {
   const { accentColor, backgroundColor } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
+    // Clear any previous errors
+    setError('');
+    
     if (!email || !password) {
-      Alert.alert('Missing info', 'Please enter email and password');
+      const errorMsg = 'Please enter email and password';
+      setError(errorMsg);
+      Alert.alert('Missing info', errorMsg);
       return;
     }
+    
+    setLoading(true);
     try {
-      const res = await axios.post('/api/login', { email, password });
-      onLogin(res.data.user);
+      console.log('Attempting login for:', email);
+      const res = await axios.post('/auth/login', { email, password });
+      console.log('Login response:', res.data);
+      if (res.data && res.data.user) {
+        onLogin(res.data.user);
+      } else {
+        const errorMsg = 'Invalid response from server';
+        setError(errorMsg);
+        Alert.alert('Login Failed', errorMsg);
+      }
     } catch (err) {
-      console.error(err);
-      Alert.alert('Login Failed', err.response?.data?.message || 'An error occurred');
+      console.error('Login error:', err);
+      console.error('Error response:', err.response?.data);
+      console.error('Error status:', err.response?.status);
+      
+      // Determine error message
+      let errorMessage = 'An error occurred';
+      if (err.code === 'ECONNREFUSED' || err.message?.includes('Network Error')) {
+        errorMessage = 'Cannot connect to server. Please check if the backend is running.';
+      } else if (err.response?.status === 401) {
+        errorMessage = err.response?.data?.error || 'Invalid email or password';
+      } else if (err.response?.status === 400) {
+        errorMessage = err.response?.data?.error || 'Invalid request. Please check your input.';
+      } else if (err.response?.data?.error) {
+        errorMessage = err.response.data.error;
+      } else if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
+      Alert.alert('Login Failed', errorMessage);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -57,11 +96,24 @@ export default function LoginScreen({ navigation, onLogin }) {
             />
           </View>
 
+          {error ? (
+            <View style={styles.errorContainer}>
+              <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
+
           <TouchableOpacity 
-            style={[styles.loginButton, { backgroundColor: accentColor, shadowColor: accentColor }]} 
+            style={[
+              styles.loginButton, 
+              { backgroundColor: accentColor, shadowColor: accentColor },
+              loading && styles.loginButtonDisabled
+            ]} 
             onPress={handleLogin}
+            disabled={loading}
           >
-            <Text style={styles.loginButtonText}>Sign In</Text>
+            <Text style={styles.loginButtonText}>
+              {loading ? 'Signing In...' : 'Sign In'}
+            </Text>
           </TouchableOpacity>
         </View>
 
@@ -158,5 +210,23 @@ const styles = StyleSheet.create({
   link: {
     fontSize: 15,
     fontWeight: '600',
+  },
+  errorContainer: {
+    marginTop: 8,
+    marginBottom: 8,
+    padding: 12,
+    backgroundColor: '#7F1D1D',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#991B1B',
+  },
+  errorText: {
+    color: '#FCA5A5',
+    fontSize: 14,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  loginButtonDisabled: {
+    opacity: 0.6,
   },
 });
