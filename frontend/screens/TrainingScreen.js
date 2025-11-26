@@ -95,7 +95,7 @@ export default function TrainingScreen({ user }) {
     setWorkoutDuration(0);
   };
 
-  const endWorkout = () => {
+  const endWorkout = async () => {
     if (selectedExercises.length > 0 || plan) {
       const workout = {
         id: Date.now(),
@@ -107,6 +107,60 @@ export default function TrainingScreen({ user }) {
         mode: mode,
       };
       addPastWorkout(workout);
+
+      // Save to backend database (only for custom workouts with exercises)
+      if (mode === 'custom' && selectedExercises.length > 0 && user?.id) {
+        try {
+          // Format exercises for API - filter out exercises without at least name
+          const exercisesForAPI = selectedExercises
+            .filter(ex => ex.name) // Only include exercises with a name
+            .map(ex => ({
+              name: ex.name,
+              sets: parseInt(ex.sets) || 1,
+              reps: parseInt(ex.reps) || 1,
+              weight: ex.weight && ex.weight.trim() !== '' ? parseFloat(ex.weight) : null,
+              rpe: null, // RPE not currently captured in UI
+            }));
+
+          // Only save if there are valid exercises
+          if (exercisesForAPI.length > 0) {
+            // Get date in ISO format (YYYY-MM-DD)
+            const today = new Date();
+            const dateISO = today.toISOString().split('T')[0];
+
+            console.log('Saving workout to database:', {
+              userId: user.id,
+              date: dateISO,
+              exercisesCount: exercisesForAPI.length,
+            });
+
+            const response = await axios.post('/api/workout-log', {
+              userId: parseInt(user.id),
+              date: dateISO,
+              exercises: exercisesForAPI,
+            });
+
+            console.log('✅ Workout saved to database successfully:', response.data);
+          } else {
+            console.warn('⚠️ No valid exercises to save');
+          }
+        } catch (error) {
+          console.error('❌ Error saving workout to database:', error);
+          console.error('Error response:', error.response?.data);
+          console.error('Error status:', error.response?.status);
+          console.error('Error message:', error.message);
+          // Don't show error to user, just log it
+          // The workout is already saved locally via addPastWorkout
+        }
+      } else {
+        if (mode !== 'custom') {
+          console.log('Workout not saved: Not in custom mode');
+        } else if (selectedExercises.length === 0) {
+          console.log('Workout not saved: No exercises');
+        } else if (!user?.id) {
+          console.log('Workout not saved: No user ID');
+        }
+      }
     }
     // Clear the workout from the screen
     setSelectedExercises([]);
@@ -220,14 +274,16 @@ export default function TrainingScreen({ user }) {
             </View>
           )}
 
-          {!workoutActive && (mode === 'custom' && selectedExercises.length > 0 || mode === 'generate' && plan) && (
-            <TouchableOpacity 
-              style={[styles.startWorkoutButton, { backgroundColor: accentColor, shadowColor: accentColor }]}
-              onPress={startWorkout}
-            >
-              <Ionicons name="play" size={20} color="#FFFFFF" />
-              <Text style={styles.startWorkoutButtonText}>Start Workout</Text>
-            </TouchableOpacity>
+          {!workoutActive && (
+            (mode === 'custom' || (mode === 'generate' && plan)) && (
+              <TouchableOpacity 
+                style={[styles.startWorkoutButton, { backgroundColor: accentColor, shadowColor: accentColor }]}
+                onPress={startWorkout}
+              >
+                <Ionicons name="play" size={20} color="#FFFFFF" />
+                <Text style={styles.startWorkoutButtonText}>Start Workout</Text>
+              </TouchableOpacity>
+            )
           )}
 
           {workoutActive && (
@@ -265,132 +321,149 @@ export default function TrainingScreen({ user }) {
 
       {mode === 'custom' && (
         <View style={styles.customWorkoutContainer}>
-          {/* Search Section */}
-          <View style={styles.searchSection}>
-            <View style={styles.searchContainer}>
-              <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search exercises..."
-                placeholderTextColor="#6B7280"
-                value={searchQuery}
-                onChangeText={(text) => {
-                  setSearchQuery(text);
-                  setShowSearchResults(text.length > 0);
-                }}
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => {
-                  setSearchQuery('');
-                  setShowSearchResults(false);
-                }}>
-                  <Ionicons name="close-circle" size={20} color="#9CA3AF" />
-                </TouchableOpacity>
+          {!workoutActive && (
+            <View style={styles.startPromptContainer}>
+              <Ionicons name="play-circle-outline" size={48} color={accentColor} />
+              <Text style={[styles.startPromptText, { color: accentColor }]}>
+                Start your workout to begin adding exercises
+              </Text>
+            </View>
+          )}
+          
+          {/* Search Section - Only enabled when workout is active */}
+          {workoutActive && (
+            <View style={styles.searchSection}>
+              <View style={styles.searchContainer}>
+                <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search exercises..."
+                  placeholderTextColor="#6B7280"
+                  value={searchQuery}
+                  onChangeText={(text) => {
+                    setSearchQuery(text);
+                    setShowSearchResults(text.length > 0);
+                  }}
+                  editable={workoutActive}
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => {
+                    setSearchQuery('');
+                    setShowSearchResults(false);
+                  }}>
+                    <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+                  </TouchableOpacity>
+                )}
+              </View>
+
+              {/* Search Results */}
+              {showSearchResults && filteredExercises.length > 0 && (
+                <View style={styles.searchResultsContainer}>
+                  <FlatList
+                    data={filteredExercises}
+                    keyExtractor={(item) => item.id.toString()}
+                    renderItem={({ item }) => (
+                      <TouchableOpacity
+                        style={styles.searchResultItem}
+                        onPress={() => addExercise(item)}
+                      >
+                        <View style={styles.searchResultContent}>
+                          <Text style={styles.searchResultName}>{item.name}</Text>
+                          <Text style={styles.searchResultCategory}>{item.category} • {item.muscle}</Text>
+                        </View>
+                        <Ionicons name="add-circle" size={24} color={accentColor} />
+                      </TouchableOpacity>
+                    )}
+                    style={styles.searchResultsList}
+                    nestedScrollEnabled
+                  />
+                </View>
+              )}
+
+              {showSearchResults && filteredExercises.length === 0 && (
+                <View style={styles.noResultsContainer}>
+                  <Text style={styles.noResultsText}>No exercises found</Text>
+                </View>
               )}
             </View>
+          )}
 
-            {/* Search Results */}
-            {showSearchResults && filteredExercises.length > 0 && (
-              <View style={styles.searchResultsContainer}>
-                <FlatList
-                  data={filteredExercises}
-                  keyExtractor={(item) => item.id.toString()}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      style={styles.searchResultItem}
-                      onPress={() => addExercise(item)}
-                    >
-                      <View style={styles.searchResultContent}>
-                        <Text style={styles.searchResultName}>{item.name}</Text>
-                        <Text style={styles.searchResultCategory}>{item.category} • {item.muscle}</Text>
-                      </View>
-                      <Ionicons name="add-circle" size={24} color={accentColor} />
-                    </TouchableOpacity>
-                  )}
-                  style={styles.searchResultsList}
-                  nestedScrollEnabled
-                />
-              </View>
-            )}
+          {/* Selected Exercises List - Only shown when workout is active */}
+          {workoutActive && (
+            <ScrollView 
+              style={styles.exercisesList}
+              contentContainerStyle={styles.exercisesListContent}
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={styles.exercisesListTitle}>
+                Your Workout ({selectedExercises.length} {selectedExercises.length === 1 ? 'exercise' : 'exercises'})
+              </Text>
 
-            {showSearchResults && filteredExercises.length === 0 && (
-              <View style={styles.noResultsContainer}>
-                <Text style={styles.noResultsText}>No exercises found</Text>
-              </View>
-            )}
-          </View>
-
-          {/* Selected Exercises List */}
-          <ScrollView 
-            style={styles.exercisesList}
-            contentContainerStyle={styles.exercisesListContent}
-            showsVerticalScrollIndicator={false}
-          >
-            <Text style={styles.exercisesListTitle}>
-              Your Workout ({selectedExercises.length} {selectedExercises.length === 1 ? 'exercise' : 'exercises'})
-            </Text>
-
-            {selectedExercises.length === 0 ? (
-              <View style={styles.emptyWorkoutContainer}>
-                <Ionicons name="barbell-outline" size={48} color="#6B7280" />
-                <Text style={styles.emptyWorkoutText}>No exercises added yet</Text>
-                <Text style={styles.emptyWorkoutSubtext}>Search and add exercises to build your workout</Text>
-              </View>
-            ) : (
-              selectedExercises.map((exercise, index) => (
-                <View key={exercise.id} style={styles.exerciseCard}>
-                  <View style={styles.exerciseHeader}>
-                    <View style={styles.exerciseInfo}>
-                      <Text style={styles.exerciseName}>{exercise.name}</Text>
-                      <Text style={styles.exerciseCategory}>{exercise.category} • {exercise.muscle}</Text>
-                    </View>
-                    <TouchableOpacity
-                      onPress={() => removeExercise(exercise.id)}
-                      style={styles.removeButton}
-                    >
-                      <Ionicons name="trash-outline" size={20} color="#EF4444" />
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={styles.exerciseInputs}>
-                    <View style={styles.inputGroup}>
-                      <Text style={styles.inputLabel}>Sets</Text>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="1"
-                        placeholderTextColor="#6B7280"
-                        value={exercise.sets}
-                        onChangeText={(value) => updateExercise(exercise.id, 'sets', value)}
-                        keyboardType="numeric"
-                      />
-                    </View>
-                    <View style={styles.inputGroup}>
-                      <Text style={styles.inputLabel}>Weight (lbs)</Text>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="0"
-                        placeholderTextColor="#6B7280"
-                        value={exercise.weight}
-                        onChangeText={(value) => updateExercise(exercise.id, 'weight', value)}
-                        keyboardType="numeric"
-                      />
-                    </View>
-                    <View style={styles.inputGroup}>
-                      <Text style={styles.inputLabel}>Reps</Text>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="0"
-                        placeholderTextColor="#6B7280"
-                        value={exercise.reps}
-                        onChangeText={(value) => updateExercise(exercise.id, 'reps', value)}
-                        keyboardType="numeric"
-                      />
-                    </View>
-                  </View>
+              {selectedExercises.length === 0 ? (
+                <View style={styles.emptyWorkoutContainer}>
+                  <Ionicons name="barbell-outline" size={48} color="#6B7280" />
+                  <Text style={styles.emptyWorkoutText}>No exercises added yet</Text>
+                  <Text style={styles.emptyWorkoutSubtext}>Search and add exercises to build your workout</Text>
                 </View>
-              ))
-            )}
-          </ScrollView>
+              ) : (
+                selectedExercises.map((exercise, index) => (
+                  <View key={exercise.id} style={styles.exerciseCard}>
+                    <View style={styles.exerciseHeader}>
+                      <View style={styles.exerciseInfo}>
+                        <Text style={styles.exerciseName}>{exercise.name}</Text>
+                        <Text style={styles.exerciseCategory}>{exercise.category} • {exercise.muscle}</Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => removeExercise(exercise.id)}
+                        style={styles.removeButton}
+                      >
+                        <Ionicons name="trash-outline" size={20} color="#EF4444" />
+                      </TouchableOpacity>
+                    </View>
+
+                    <View style={styles.exerciseInputs}>
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.inputLabel}>Sets</Text>
+                        <TextInput
+                          style={styles.input}
+                          placeholder="1"
+                          placeholderTextColor="#6B7280"
+                          value={exercise.sets}
+                          onChangeText={(value) => updateExercise(exercise.id, 'sets', value)}
+                          keyboardType="numeric"
+                          editable={workoutActive}
+                        />
+                      </View>
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.inputLabel}>Weight (lbs)</Text>
+                        <TextInput
+                          style={styles.input}
+                          placeholder="0"
+                          placeholderTextColor="#6B7280"
+                          value={exercise.weight}
+                          onChangeText={(value) => updateExercise(exercise.id, 'weight', value)}
+                          keyboardType="numeric"
+                          editable={workoutActive}
+                        />
+                      </View>
+                      <View style={styles.inputGroup}>
+                        <Text style={styles.inputLabel}>Reps</Text>
+                        <TextInput
+                          style={styles.input}
+                          placeholder="0"
+                          placeholderTextColor="#6B7280"
+                          value={exercise.reps}
+                          onChangeText={(value) => updateExercise(exercise.id, 'reps', value)}
+                          keyboardType="numeric"
+                          editable={workoutActive}
+                        />
+                      </View>
+                    </View>
+                  </View>
+                ))
+              )}
+            </ScrollView>
+          )}
         </View>
       )}
 
@@ -604,6 +677,18 @@ const styles = StyleSheet.create({
     color: '#F9FAFB',
     marginBottom: 16,
     letterSpacing: -0.3,
+  },
+  startPromptContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 20,
+  },
+  startPromptText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 16,
+    textAlign: 'center',
   },
   emptyWorkoutContainer: {
     alignItems: 'center',
