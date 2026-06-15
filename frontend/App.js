@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
+import Constants from 'expo-constants';
 import { ThemeProvider, useTheme } from './ThemeContext';
 import { WorkoutProvider } from './WorkoutContext';
 import { NutritionGoalsProvider } from './NutritionGoalsContext';
@@ -19,17 +20,16 @@ import PersonalTrainerScreen from './screens/PersonalTrainerScreen';
 import HealthScreen from './screens/HealthScreen';
 import ProfileScreen from './screens/ProfileScreen';
 
-// Configure axios base URL
-// For web/simulator: use localhost
-// For physical device: use your computer's local IP address
-const API_BASE_URL = __DEV__
-  ? Platform?.OS === 'web'
-    ? 'http://localhost:3000'
-    : 'http://192.168.68.72:3000'
-  : 'http://localhost:3000';
+// API URL is configured in app.json → extra.apiUrl
+// For iOS Simulator / web: http://localhost:3000
+// For physical device: set extra.apiUrl to your machine's LAN IP (e.g. http://192.168.1.100:3000)
+// For production: set extra.apiUrl to your hosted backend URL
+const API_BASE_URL =
+  Constants.expoConfig?.extra?.apiUrl ||
+  (Platform?.OS === 'web' ? 'http://localhost:3000' : 'http://localhost:3000');
 
 axios.defaults.baseURL = API_BASE_URL;
-console.log('API Base URL:', API_BASE_URL);
+if (__DEV__) console.log('API Base URL:', API_BASE_URL);
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();

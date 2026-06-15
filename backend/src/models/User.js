@@ -26,11 +26,17 @@ class User {
     };
   }
 
-  // Update user
+  // Update user profile
   static async update(id, { name, email }) {
     const sql = 'UPDATE users SET name = ?, email = ? WHERE id = ?';
     await query(sql, [name, email, id]);
     return await this.findById(id);
+  }
+
+  // Update password hash only
+  static async updatePassword(id, passwordHash) {
+    const sql = 'UPDATE users SET password_hash = ? WHERE id = ?';
+    await query(sql, [passwordHash, id]);
   }
 
   // Delete user

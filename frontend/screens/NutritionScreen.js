@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, FlatList, Modal, Alert, Image } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, FlatList, Modal, Alert, Image, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import axios from 'axios';
 import { useTheme } from '../ThemeContext';
 import { useNutritionGoals } from '../NutritionGoalsContext';
+import { useAuth } from '../AuthContext';
 
 // Mock food database (per 100g or per serving)
 const FOOD_DATABASE = [
@@ -29,13 +31,17 @@ const FOOD_DATABASE = [
   { id: 20, name: 'Whey Protein', category: 'Supplements', calories: 103, protein: 20, carbs: 2, fat: 1, servingSize: '1 scoop (30g)' },
 ];
 
-export default function NutritionScreen() {
+export default function NutritionScreen({ user }) {
   const { accentColor, backgroundColor } = useTheme();
   const { goals: DAILY_GOALS } = useNutritionGoals();
+  const { user: authUser } = useAuth();
+  const activeUser = user || authUser;
   const navigation = useNavigation();
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [selectedFoods, setSelectedFoods] = useState([]);
+  const [loggedEntries, setLoggedEntries] = useState([]);
+  const [isSaving, setIsSaving] = useState(false);
   const [showCustomFoodModal, setShowCustomFoodModal] = useState(false);
   const [customFood, setCustomFood] = useState({
     name: '',
@@ -46,13 +52,86 @@ export default function NutritionScreen() {
     servingSize: '',
   });
 
-  // Calculate totals
-  const totals = selectedFoods.reduce((acc, food) => ({
+  const today = new Date().toISOString().split('T')[0];
+
+  const fetchTodaysLog = useCallback(async () => {
+    if (!activeUser?.id) return;
+    try {
+      const res = await axios.get(`/api/nutrition/${activeUser.id}`, { params: { date: today } });
+      setLoggedEntries(res.data.entries || []);
+    } catch {
+      // non-fatal — app works fine without backend
+    }
+  }, [activeUser?.id, today]);
+
+  useEffect(() => {
+    fetchTodaysLog();
+  }, [fetchTodaysLog]);
+
+  const loggedTotals = loggedEntries.reduce(
+    (acc, e) => ({
+      calories: acc.calories + (parseFloat(e.calories) || 0),
+      protein: acc.protein + (parseFloat(e.protein) || 0),
+      carbs: acc.carbs + (parseFloat(e.carbs) || 0),
+      fat: acc.fat + (parseFloat(e.fat) || 0),
+    }),
+    { calories: 0, protein: 0, carbs: 0, fat: 0 }
+  );
+
+  const handleLogMeal = async () => {
+    if (selectedFoods.length === 0) return;
+    setIsSaving(true);
+    try {
+      if (activeUser?.id) {
+        await Promise.all(
+          selectedFoods.map((food) =>
+            axios.post('/api/nutrition', {
+              userId: activeUser.id,
+              meal: food.name,
+              calories: Math.round(food.calories || 0),
+              protein: Math.round((food.protein || 0) * 10) / 10,
+              carbs: Math.round((food.carbs || 0) * 10) / 10,
+              fat: Math.round((food.fat || 0) * 10) / 10,
+              date: today,
+            })
+          )
+        );
+        await fetchTodaysLog();
+      }
+      setSelectedFoods([]);
+      Alert.alert('Logged!', 'Your meal has been saved to today\'s log.');
+    } catch {
+      Alert.alert('Error', 'Failed to save meal. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteLoggedEntry = async (entryId) => {
+    try {
+      if (activeUser?.id) {
+        await axios.delete(`/api/nutrition/${entryId}`);
+      }
+      setLoggedEntries((prev) => prev.filter((e) => e.id !== entryId));
+    } catch {
+      Alert.alert('Error', 'Failed to delete entry.');
+    }
+  };
+
+  // Calculate totals (pending selection + already-logged entries)
+  const pendingTotals = selectedFoods.reduce((acc, food) => ({
     calories: acc.calories + (food.calories || 0),
     protein: acc.protein + (food.protein || 0),
     carbs: acc.carbs + (food.carbs || 0),
     fat: acc.fat + (food.fat || 0),
   }), { calories: 0, protein: 0, carbs: 0, fat: 0 });
+
+  const totals = {
+    calories: pendingTotals.calories + loggedTotals.calories,
+    protein: pendingTotals.protein + loggedTotals.protein,
+    carbs: pendingTotals.carbs + loggedTotals.carbs,
+    fat: pendingTotals.fat + loggedTotals.fat,
+  };
 
   const filteredFoods = FOOD_DATABASE.filter(food =>
     food.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -327,17 +406,33 @@ export default function NutritionScreen() {
           )}
         </View>
 
-        {/* Selected Foods List */}
+        {/* Pending Foods — being built before logging */}
         <View style={styles.foodsList}>
-          <Text style={styles.foodsListTitle}>
-            Logged Foods ({selectedFoods.length} {selectedFoods.length === 1 ? 'item' : 'items'})
-          </Text>
+          <View style={styles.foodsListHeader}>
+            <Text style={styles.foodsListTitle}>
+              Current Meal ({selectedFoods.length} {selectedFoods.length === 1 ? 'item' : 'items'})
+            </Text>
+            {selectedFoods.length > 0 && (
+              <TouchableOpacity
+                style={[styles.logMealButton, { backgroundColor: accentColor }, isSaving && { opacity: 0.6 }]}
+                onPress={handleLogMeal}
+                disabled={isSaving}
+              >
+                {isSaving ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name="checkmark-circle" size={16} color="#fff" />
+                )}
+                <Text style={styles.logMealButtonText}>{isSaving ? 'Saving…' : 'Log Meal'}</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           {selectedFoods.length === 0 ? (
             <View style={styles.emptyFoodContainer}>
               <Ionicons name="restaurant-outline" size={48} color="#6B7280" />
-              <Text style={styles.emptyFoodText}>No foods logged yet</Text>
-              <Text style={styles.emptyFoodSubtext}>Search and add foods to track your nutrition</Text>
+              <Text style={styles.emptyFoodText}>No foods added yet</Text>
+              <Text style={styles.emptyFoodSubtext}>Search above to build your meal, then tap Log Meal to save it</Text>
             </View>
           ) : (
             selectedFoods.map((food) => (
@@ -436,6 +531,26 @@ export default function NutritionScreen() {
             ))
           )}
         </View>
+
+        {/* Today's Logged Meals */}
+        {loggedEntries.length > 0 && (
+          <View style={styles.foodsList}>
+            <Text style={styles.foodsListTitle}>Today's Log ({loggedEntries.length} {loggedEntries.length === 1 ? 'entry' : 'entries'})</Text>
+            {loggedEntries.map((entry) => (
+              <View key={entry.id} style={styles.loggedEntryCard}>
+                <View style={styles.loggedEntryInfo}>
+                  <Text style={styles.loggedEntryName}>{entry.meal}</Text>
+                  <Text style={styles.loggedEntryMacros}>
+                    {Math.round(entry.calories)} kcal · {Math.round(entry.protein)}g P · {Math.round(entry.carbs)}g C · {Math.round(entry.fat)}g F
+                  </Text>
+                </View>
+                <TouchableOpacity onPress={() => handleDeleteLoggedEntry(entry.id)} style={styles.removeButton}>
+                  <Ionicons name="trash-outline" size={18} color="#EF4444" />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
       </ScrollView>
 
       {/* Custom Food Modal */}
@@ -742,12 +857,54 @@ const styles = StyleSheet.create({
   foodsList: {
     marginTop: 8,
   },
+  foodsListHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   foodsListTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: '#F9FAFB',
-    marginBottom: 16,
     letterSpacing: -0.3,
+  },
+  logMealButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    gap: 6,
+  },
+  logMealButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  loggedEntryCard: {
+    backgroundColor: '#1F2937',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#374151',
+    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  loggedEntryInfo: {
+    flex: 1,
+  },
+  loggedEntryName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#F9FAFB',
+    marginBottom: 4,
+  },
+  loggedEntryMacros: {
+    fontSize: 13,
+    color: '#9CA3AF',
+    fontWeight: '400',
   },
   emptyFoodContainer: {
     alignItems: 'center',

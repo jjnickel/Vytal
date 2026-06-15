@@ -1,40 +1,86 @@
-import React, { createContext, useState, useContext } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
+import axios from 'axios';
+import { useAuth } from './AuthContext';
 
 const WeightContext = createContext();
 
 export const useWeight = () => {
   const context = useContext(WeightContext);
-  if (!context) {
-    throw new Error('useWeight must be used within WeightProvider');
-  }
+  if (!context) throw new Error('useWeight must be used within WeightProvider');
   return context;
 };
 
 export const WeightProvider = ({ children }) => {
-  // Mock initial weight data - in a real app this would come from storage/API
-  const [weightEntries, setWeightEntries] = useState([
-    { id: 1, date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), weight: 180 },
-    { id: 2, date: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000), weight: 179 },
-    { id: 3, date: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000), weight: 178.5 },
-    { id: 4, date: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000), weight: 177.5 },
-    { id: 5, date: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000), weight: 177 },
-    { id: 6, date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), weight: 176.5 },
-    { id: 7, date: new Date(), weight: 176 },
-  ]);
+  const { user } = useAuth();
+  const [weightEntries, setWeightEntries] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  const addWeightEntry = (weight) => {
-    const newEntry = {
-      id: Date.now(),
-      date: new Date(),
+  const fetchEntries = useCallback(async (userId) => {
+    setLoading(true);
+    try {
+      const res = await axios.get(`/api/weight/${userId}`);
+      const entries = (res.data.entries || []).map((e) => ({
+        id: e.id,
+        // MySQL returns date as a string "YYYY-MM-DD" — parse in UTC to avoid timezone shift
+        date: new Date(e.date + 'T12:00:00Z'),
+        weight: parseFloat(e.weight),
+      }));
+      setWeightEntries(entries);
+    } catch (err) {
+      console.error('Failed to load weight entries:', err.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Load when user logs in, clear when logged out
+  useEffect(() => {
+    if (user?.id) {
+      fetchEntries(user.id);
+    } else {
+      setWeightEntries([]);
+    }
+  }, [user?.id, fetchEntries]);
+
+  const addWeightEntry = async (weight) => {
+    const today = new Date().toISOString().split('T')[0];
+    const optimisticEntry = {
+      id: `tmp-${Date.now()}`,
+      date: new Date(today + 'T12:00:00Z'),
       weight: parseFloat(weight),
     };
-    setWeightEntries([...weightEntries, newEntry].sort((a, b) => a.date - b.date));
+
+    // Optimistic update
+    setWeightEntries((prev) =>
+      [...prev.filter((e) => e.date.toISOString().split('T')[0] !== today), optimisticEntry]
+        .sort((a, b) => a.date - b.date)
+    );
+
+    if (user?.id) {
+      try {
+        const res = await axios.post('/api/weight', {
+          userId: user.id,
+          weight: parseFloat(weight),
+          date: today,
+        });
+        // Replace optimistic entry with real one
+        const saved = {
+          id: res.data.entry?.id || optimisticEntry.id,
+          date: new Date(today + 'T12:00:00Z'),
+          weight: parseFloat(weight),
+        };
+        setWeightEntries((prev) =>
+          prev.map((e) => (e.id === optimisticEntry.id ? saved : e))
+        );
+      } catch (err) {
+        console.error('Failed to save weight entry:', err.message);
+      }
+    }
   };
 
   return (
-    <WeightContext.Provider value={{ weightEntries, addWeightEntry }}>
+    <WeightContext.Provider value={{ weightEntries, addWeightEntry, loading }}>
       {children}
     </WeightContext.Provider>
   );
 };
-

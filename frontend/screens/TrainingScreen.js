@@ -135,7 +135,6 @@ export default function TrainingScreen({ user }) {
             });
 
             const response = await axios.post('/api/workout-log', {
-              userId: parseInt(user.id),
               date: dateISO,
               exercises: exercisesForAPI,
             });

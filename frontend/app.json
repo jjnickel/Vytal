@@ -2,20 +2,20 @@
   "expo": {
     "name": "Vytal",
     "slug": "vytal",
-    "version": "0.1.0",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#111827"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
+      "bundleIdentifier": "com.vytal.app",
+      "buildNumber": "1",
       "infoPlist": {
         "NSCameraUsageDescription": "Vytal uses your camera so you can take photos for exercise form analysis by your AI trainer.",
         "NSPhotoLibraryUsageDescription": "Vytal accesses your photo library so you can upload images for exercise form analysis by your AI trainer.",
@@ -23,14 +23,17 @@
       }
     },
     "android": {
+      "package": "com.vytal.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#FFFFFF"
+        "backgroundColor": "#111827"
       },
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.INTERNET"
       ]
     },
     "web": {
@@ -44,6 +47,12 @@
           "cameraPermission": "Vytal uses your camera to take photos for exercise form analysis."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "apiUrl": "http://localhost:3000",
+      "eas": {
+        "projectId": "replace-with-your-eas-project-id"
+      }
+    }
   }
 }

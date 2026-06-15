@@ -69,6 +69,18 @@ CREATE TABLE IF NOT EXISTS nutrition_entries (
   INDEX idx_user_date (user_id, date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Password reset tokens table
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  token_hash VARCHAR(255) NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE KEY unique_user (user_id),
+  INDEX idx_token_hash (token_hash)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Workout plans table (stored AI-generated plans)
 CREATE TABLE IF NOT EXISTS workout_plans (
   id INT AUTO_INCREMENT PRIMARY KEY,
