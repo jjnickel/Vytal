@@ -1,32 +1,11 @@
-// Entry point for the AI Fitness prototype backend.
-//
-// This Express server exposes a handful of REST endpoints that the
-// React Native client can interact with. The server uses MySQL for
-// persistent data storage.
-//
-// Features provided:
-//   * User registration and login (with MySQL persistence)
-//   * Generating a simple workout plan using OpenAI (stubbed if no API key)
-//   * Logging completed workouts (stored in MySQL)
-//   * Weight tracking (stored in MySQL)
-//   * Nutrition tracking (stored in MySQL)
-//
-// To run this server:
-//   1. Install dependencies with `npm install` in the backend directory
-//   2. Set up MySQL database (see DATABASE_SETUP.md)
-//   3. Create a .env file with database credentials and other settings
-//   4. Run `node src/database/init.js` to initialize the database
-//   5. Run `npm start` to start the server on port 3000
-
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const dotenv = require('dotenv');
 
-// Attempt to load environment variables from .env
 dotenv.config();
 
-const { generateWorkoutPlan } = require('./services/workout');
+const { generateWorkoutPlan, getOpenAI } = require('./services/workout');
 const authRouter = require('./routes/auth');
 const { testConnection } = require('./config/database');
 const WorkoutLog = require('./models/WorkoutLog');
@@ -37,30 +16,24 @@ const WorkoutPlan = require('./models/WorkoutPlan');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Use CORS to allow the React Native client to connect
 app.use(cors());
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: '10mb' }));
 
-// Request logging middleware
 app.use((req, res, next) => {
-  console.log(`${req.method} ${req.path}`, req.body ? JSON.stringify(req.body) : '');
+  console.log(`${req.method} ${req.path}`);
   next();
 });
 
 app.use('/auth', authRouter);
 
 // GET /api/workout-plan – Generate a workout plan for the user
-// Optionally accepts query parameters: goal, experience, userId
 app.get('/api/workout-plan', async (req, res) => {
   const { goal = 'general fitness', experience = 'beginner', userId } = req.query;
   try {
     const plan = await generateWorkoutPlan({ goal, experience });
-    
-    // Optionally save the plan to database if userId is provided
     if (userId) {
       await WorkoutPlan.createOrUpdate({ userId: parseInt(userId), goal, experience, planData: plan });
     }
-    
     res.json({ plan });
   } catch (error) {
     console.error('Error generating workout plan:', error);
@@ -68,24 +41,112 @@ app.get('/api/workout-plan', async (req, res) => {
   }
 });
 
+// POST /api/trainer/chat – AI personal trainer chat
+app.post('/api/trainer/chat', async (req, res) => {
+  const { messages, userContext } = req.body;
+
+  if (!messages || !Array.isArray(messages)) {
+    return res.status(400).json({ message: 'Messages array is required' });
+  }
+
+  const openai = getOpenAI();
+  if (!openai) {
+    return res.status(503).json({
+      message: 'AI service not configured. Please set OPENAI_API_KEY in your .env file.',
+    });
+  }
+
+  try {
+    const systemPrompt = buildTrainerSystemPrompt(userContext);
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'system', content: systemPrompt }, ...messages],
+      temperature: 0.8,
+      max_tokens: 800,
+    });
+    const message = response.choices[0].message.content.trim();
+    res.json({ message });
+  } catch (error) {
+    console.error('Error in trainer chat:', error);
+    res.status(500).json({ message: 'Failed to get AI response' });
+  }
+});
+
+// POST /api/trainer/analyze-image – Analyze exercise form from an image
+app.post('/api/trainer/analyze-image', async (req, res) => {
+  const { imageBase64, mimeType, prompt, userContext } = req.body;
+
+  if (!imageBase64) {
+    return res.status(400).json({ message: 'Image data is required' });
+  }
+
+  const openai = getOpenAI();
+  if (!openai) {
+    return res.status(503).json({
+      message: 'AI service not configured. Please set OPENAI_API_KEY in your .env file.',
+    });
+  }
+
+  try {
+    const systemPrompt = buildTrainerSystemPrompt(userContext);
+    const userPrompt = prompt || 'Please analyze this image and provide fitness coaching feedback on form, technique, or posture.';
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image_url',
+              image_url: { url: `data:${mimeType || 'image/jpeg'};base64,${imageBase64}` },
+            },
+            { type: 'text', text: userPrompt },
+          ],
+        },
+      ],
+      max_tokens: 500,
+    });
+
+    const message = response.choices[0].message.content.trim();
+    res.json({ message });
+  } catch (error) {
+    console.error('Error analyzing image:', error);
+    res.status(500).json({ message: 'Failed to analyze image' });
+  }
+});
+
+function buildTrainerSystemPrompt(userContext) {
+  let prompt =
+    'You are Vytal, an expert AI personal trainer and nutritionist. You are knowledgeable, motivating, and provide specific, actionable fitness and nutrition advice.';
+
+  if (userContext?.name) {
+    prompt += ` You are talking with ${userContext.name}.`;
+  }
+
+  if (userContext?.goals) {
+    const g = userContext.goals;
+    prompt += ` Their daily nutrition targets are: ${g.calories} calories, ${g.protein}g protein, ${g.carbs}g carbs, ${g.fat}g fat.`;
+  }
+
+  prompt +=
+    ' Keep responses concise (2-4 sentences for simple questions, more detail when instructions or plans are requested). Always be encouraging and professional. Use markdown formatting only for workout plans or detailed lists.';
+
+  return prompt;
+}
+
 // POST /api/workout-log – Record a completed workout
-// Expected body: { userId: number, date: ISO date, exercises: [{ name, sets, reps, weight, rpe }] }
 app.post('/api/workout-log', async (req, res) => {
   try {
     const { userId, date, exercises } = req.body;
-    console.log('Workout log request:', { userId, date, exercisesCount: exercises?.length });
-    
     if (!userId || !date || !Array.isArray(exercises)) {
-      console.error('Missing required fields:', { userId, date, exercises });
-      return res.status(400).json({ message: 'Missing required fields', details: { userId: !!userId, date: !!date, exercises: Array.isArray(exercises) } });
+      return res.status(400).json({ message: 'Missing required fields' });
     }
-    
     const workoutLog = await WorkoutLog.create({ userId: parseInt(userId), date, exercises });
-    console.log('Workout logged successfully:', workoutLog.id);
     res.json({ message: 'Workout logged', workoutLog });
   } catch (error) {
     console.error('Error logging workout:', error);
-    console.error('Error stack:', error.stack);
     res.status(500).json({ message: 'Failed to log workout', error: error.message });
   }
 });
@@ -93,8 +154,7 @@ app.post('/api/workout-log', async (req, res) => {
 // GET /api/workout-log/:userId – Retrieve logged workouts for a user
 app.get('/api/workout-log/:userId', async (req, res) => {
   try {
-    const { userId } = req.params;
-    const logs = await WorkoutLog.findByUserId(parseInt(userId));
+    const logs = await WorkoutLog.findByUserId(parseInt(req.params.userId));
     res.json({ logs });
   } catch (error) {
     console.error('Error fetching workout logs:', error);
@@ -103,7 +163,6 @@ app.get('/api/workout-log/:userId', async (req, res) => {
 });
 
 // POST /api/weight – Record a weight entry
-// Expected body: { userId: number, weight: number, date: ISO date }
 app.post('/api/weight', async (req, res) => {
   try {
     const { userId, weight, date } = req.body;
@@ -121,8 +180,7 @@ app.post('/api/weight', async (req, res) => {
 // GET /api/weight/:userId – Retrieve weight entries for a user
 app.get('/api/weight/:userId', async (req, res) => {
   try {
-    const { userId } = req.params;
-    const entries = await WeightEntry.findByUserId(parseInt(userId));
+    const entries = await WeightEntry.findByUserId(parseInt(req.params.userId));
     res.json({ entries });
   } catch (error) {
     console.error('Error fetching weight entries:', error);
@@ -130,26 +188,53 @@ app.get('/api/weight/:userId', async (req, res) => {
   }
 });
 
-// POST /api/nutrition/estimate – Stub endpoint to estimate nutrition from meal name
-// Expected body: { meal: string }
-app.post('/api/nutrition/estimate', (req, res) => {
+// POST /api/nutrition/estimate – Estimate macros from meal description using AI
+app.post('/api/nutrition/estimate', async (req, res) => {
   const { meal } = req.body;
   if (!meal) {
     return res.status(400).json({ message: 'Missing meal description' });
   }
-  // Fake macro breakdown for the prototype
-  const estimate = {
-    meal,
-    calories: 500,
-    protein: 30,
-    carbs: 50,
-    fat: 15
-  };
-  res.json({ estimate });
+
+  const openai = getOpenAI();
+  if (!openai) {
+    return res.json({ estimate: { meal, calories: 500, protein: 30, carbs: 50, fat: 15 } });
+  }
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You are a nutrition expert. Estimate the macronutrients for the given meal. Respond ONLY with valid JSON: {"calories": number, "protein": number, "carbs": number, "fat": number}. All values must be integers.',
+        },
+        { role: 'user', content: `Estimate macros for: ${meal}` },
+      ],
+      temperature: 0.3,
+      max_tokens: 100,
+    });
+
+    const content = response.choices[0].message.content.trim();
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    const macros = JSON.parse(jsonMatch ? jsonMatch[0] : content);
+
+    res.json({
+      estimate: {
+        meal,
+        calories: Math.round(macros.calories) || 0,
+        protein: Math.round(macros.protein) || 0,
+        carbs: Math.round(macros.carbs) || 0,
+        fat: Math.round(macros.fat) || 0,
+      },
+    });
+  } catch (error) {
+    console.error('Error estimating nutrition:', error);
+    res.json({ estimate: { meal, calories: 500, protein: 30, carbs: 50, fat: 15 } });
+  }
 });
 
 // POST /api/nutrition – Record a nutrition entry
-// Expected body: { userId: number, meal: string, calories: number, protein: number, carbs: number, fat: number, date: ISO date }
 app.post('/api/nutrition', async (req, res) => {
   try {
     const { userId, meal, calories, protein, carbs, fat, date } = req.body;
@@ -175,8 +260,7 @@ app.post('/api/nutrition', async (req, res) => {
 // GET /api/nutrition/:userId – Retrieve nutrition entries for a user
 app.get('/api/nutrition/:userId', async (req, res) => {
   try {
-    const { userId } = req.params;
-    const entries = await NutritionEntry.findByUserId(parseInt(userId));
+    const entries = await NutritionEntry.findByUserId(parseInt(req.params.userId));
     res.json({ entries });
   } catch (error) {
     console.error('Error fetching nutrition entries:', error);
@@ -184,31 +268,25 @@ app.get('/api/nutrition/:userId', async (req, res) => {
   }
 });
 
-// Health check endpoint
+// Health check
 app.get('/health', async (req, res) => {
   const dbConnected = await testConnection();
-  res.json({ 
-    status: 'ok', 
-    message: 'Backend is running', 
+  res.json({
+    status: 'ok',
+    message: 'Backend is running',
     port: PORT,
-    database: dbConnected ? 'connected' : 'disconnected'
+    database: dbConnected ? 'connected' : 'disconnected',
+    ai: getOpenAI() ? 'configured' : 'not configured (set OPENAI_API_KEY)',
   });
 });
 
-// Initialize database connection and start server
 async function startServer() {
-  // Test database connection
   const dbConnected = await testConnection();
   if (!dbConnected) {
-    console.warn('⚠️  Warning: Database connection failed. Some features may not work.');
-    console.warn('   Make sure MySQL is running and database credentials are correct in .env');
+    console.warn('Warning: Database connection failed. Some features may not work.');
   }
-
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`AI Fitness backend listening on port ${PORT}`);
-    console.log(`Server accessible at:`);
-    console.log(`  - http://localhost:${PORT}`);
-    console.log(`  - http://127.0.0.1:${PORT}`);
   });
 }
 

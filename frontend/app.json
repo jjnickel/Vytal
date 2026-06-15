@@ -15,16 +15,35 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSCameraUsageDescription": "Vytal uses your camera so you can take photos for exercise form analysis by your AI trainer.",
+        "NSPhotoLibraryUsageDescription": "Vytal accesses your photo library so you can upload images for exercise form analysis by your AI trainer.",
+        "NSMicrophoneUsageDescription": "Vytal may use the microphone when recording video for form analysis."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FFFFFF"
-      }
+      },
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Vytal accesses your photos to upload images for exercise form analysis.",
+          "cameraPermission": "Vytal uses your camera to take photos for exercise form analysis."
+        }
+      ]
+    ]
   }
 }

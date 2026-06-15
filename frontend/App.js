@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { View, ActivityIndicator, Platform, I18nManager, Image } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -9,6 +9,7 @@ import { ThemeProvider, useTheme } from './ThemeContext';
 import { WorkoutProvider } from './WorkoutContext';
 import { NutritionGoalsProvider } from './NutritionGoalsContext';
 import { WeightProvider } from './WeightContext';
+import { AuthProvider, useAuth } from './AuthContext';
 import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
 import HomeScreen from './screens/HomeScreen';
@@ -18,16 +19,17 @@ import PersonalTrainerScreen from './screens/PersonalTrainerScreen';
 import HealthScreen from './screens/HealthScreen';
 import ProfileScreen from './screens/ProfileScreen';
 
-// Configure axios base URL to your backend. 
+// Configure axios base URL
 // For web/simulator: use localhost
-// For physical device: use your computer's local IP address (e.g., http://192.168.1.100:3000)
-// To find your IP: Windows: ipconfig | findstr IPv4, Mac/Linux: ifconfig or ip addr
-const API_BASE_URL = __DEV__ 
-  ? (Platform?.OS === 'web' ? 'http://localhost:3000' : 'http://192.168.68.72:3000')  // Change IP for physical device
-  : 'http://localhost:3000';      // Production URL
+// For physical device: use your computer's local IP address
+const API_BASE_URL = __DEV__
+  ? Platform?.OS === 'web'
+    ? 'http://localhost:3000'
+    : 'http://192.168.68.72:3000'
+  : 'http://localhost:3000';
 
 axios.defaults.baseURL = API_BASE_URL;
-console.log('API Base URL configured:', API_BASE_URL);
+console.log('API Base URL:', API_BASE_URL);
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -41,14 +43,14 @@ function LoadingScreen() {
   );
 }
 
-function MainTabs({ user }) {
+function MainTabs() {
+  const { user } = useAuth();
   const { accentColor } = useTheme();
+
   return (
     <Tab.Navigator
       screenOptions={({ route }) => {
-        // Special styling for Personal Trainer tab
         const isPersonalTrainer = route.name === 'PersonalTrainer';
-        
         return {
           headerShown: false,
           tabBarStyle: {
@@ -63,19 +65,11 @@ function MainTabs({ user }) {
           tabBarInactiveTintColor: '#9CA3AF',
           tabBarIcon: ({ focused, color, size }) => {
             let iconName;
-            if (route.name === 'Training') {
-              iconName = focused ? 'barbell' : 'barbell-outline';
-            } else if (route.name === 'Nutrition') {
-              iconName = focused ? 'nutrition' : 'nutrition-outline';
-            } else if (route.name === 'PersonalTrainer') {
-              iconName = 'fitness';
-            } else if (route.name === 'Health') {
-              iconName = focused ? 'heart' : 'heart-outline';
-            } else if (route.name === 'Profile') {
-              iconName = focused ? 'person' : 'person-outline';
-            }
-            
-            // Special styling for Personal Trainer icon
+            if (route.name === 'Training') iconName = focused ? 'barbell' : 'barbell-outline';
+            else if (route.name === 'Nutrition') iconName = focused ? 'nutrition' : 'nutrition-outline';
+            else if (route.name === 'Health') iconName = focused ? 'heart' : 'heart-outline';
+            else if (route.name === 'Profile') iconName = focused ? 'person' : 'person-outline';
+
             if (isPersonalTrainer) {
               return (
                 <View
@@ -97,116 +91,75 @@ function MainTabs({ user }) {
                 >
                   <Image
                     source={require('./assets/logo.png')}
-                    style={{
-                      width: 56,
-                      height: 56,
-                      resizeMode: 'cover',
-                    }}
+                    style={{ width: 56, height: 56, resizeMode: 'cover' }}
                   />
                 </View>
               );
             }
-            
             return <Ionicons name={iconName} size={size} color={color} />;
           },
-          tabBarLabel: isPersonalTrainer ? '' : undefined, // Hide label for Personal Trainer
+          tabBarLabel: isPersonalTrainer ? '' : undefined,
         };
       }}
     >
-      <Tab.Screen name="Training">
-        {() => <TrainingScreen user={user} />}
+      <Tab.Screen name="Training">{() => <TrainingScreen user={user} />}</Tab.Screen>
+      <Tab.Screen name="Nutrition">{() => <NutritionScreen user={user} />}</Tab.Screen>
+      <Tab.Screen name="PersonalTrainer" options={{ tabBarLabel: '' }}>
+        {() => <PersonalTrainerScreen user={user} />}
       </Tab.Screen>
-      <Tab.Screen name="Nutrition">
-        {() => <NutritionScreen user={user} />}
-      </Tab.Screen>
-      <Tab.Screen 
-        name="PersonalTrainer"
-        options={{
-          tabBarLabel: '',
-        }}
-      >
-        {() => <PersonalTrainerScreen />}
-      </Tab.Screen>
-      <Tab.Screen name="Health">
-        {() => <HealthScreen user={user} />}
-      </Tab.Screen>
-      <Tab.Screen name="Profile">
-        {() => <ProfileScreen user={user} />}
-      </Tab.Screen>
+      <Tab.Screen name="Health">{() => <HealthScreen user={user} />}</Tab.Screen>
+      <Tab.Screen name="Profile">{() => <ProfileScreen user={user} />}</Tab.Screen>
     </Tab.Navigator>
   );
 }
 
-export default function App() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+function AppNavigator() {
+  const { user, loading } = useAuth();
 
-  // Force LTR (left-to-right) layout on mount
   useEffect(() => {
     try {
       if (I18nManager.isRTL) {
         I18nManager.forceRTL(false);
         I18nManager.allowRTL(false);
-        I18nManager.swapLeftAndRightInRTL(false);
-        // On Android, need to restart app for changes to take effect
-        if (Platform.OS === 'android') {
-          // Note: This requires app restart on Android
-        }
       }
     } catch (error) {
       console.warn('I18nManager error:', error);
     }
   }, []);
 
-  // Simulate loading user from async storage or API
-  useEffect(() => {
-    const fetchUser = async () => {
-      // In a real app we would load persisted user data here
-      setLoading(false);
-    };
-    fetchUser();
-  }, []);
+  if (loading) return <LoadingScreen />;
 
   return (
-    <ThemeProvider>
-      <WorkoutProvider>
-        <NutritionGoalsProvider>
-          <WeightProvider>
-            {loading ? (
-              <LoadingScreen />
-            ) : (
-              <NavigationContainer>
-                <Stack.Navigator 
-                  screenOptions={{ 
-                    headerShown: false,
-                    animation: 'default',
-                  }}
-                >
-                  {user ? (
-                    <>
-                      <Stack.Screen name="Main">
-                        {() => <MainTabs user={user} />}
-                      </Stack.Screen>
-                      <Stack.Screen name="Home">
-                        {() => <HomeScreen user={user} />}
-                      </Stack.Screen>
-                    </>
-                  ) : (
-                    <>
-                      <Stack.Screen name="Login">
-                        {({ navigation }) => <LoginScreen navigation={navigation} onLogin={setUser} />}
-                      </Stack.Screen>
-                      <Stack.Screen name="Register">
-                        {({ navigation }) => <RegisterScreen navigation={navigation} onLogin={setUser} />}
-                      </Stack.Screen>
-                    </>
-                  )}
-                </Stack.Navigator>
-              </NavigationContainer>
-            )}
-          </WeightProvider>
-        </NutritionGoalsProvider>
-      </WorkoutProvider>
-    </ThemeProvider>
+    <NavigationContainer>
+      <Stack.Navigator screenOptions={{ headerShown: false, animation: 'default' }}>
+        {user ? (
+          <>
+            <Stack.Screen name="Main">{() => <MainTabs />}</Stack.Screen>
+            <Stack.Screen name="Home">{() => <HomeScreen user={user} />}</Stack.Screen>
+          </>
+        ) : (
+          <>
+            <Stack.Screen name="Login">{({ navigation }) => <LoginScreen navigation={navigation} />}</Stack.Screen>
+            <Stack.Screen name="Register">{({ navigation }) => <RegisterScreen navigation={navigation} />}</Stack.Screen>
+          </>
+        )}
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <ThemeProvider>
+        <WorkoutProvider>
+          <NutritionGoalsProvider>
+            <WeightProvider>
+              <AppNavigator />
+            </WeightProvider>
+          </NutritionGoalsProvider>
+        </WorkoutProvider>
+      </ThemeProvider>
+    </AuthProvider>
   );
 }

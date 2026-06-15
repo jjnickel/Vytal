@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, KeyboardAvoidingView, Platform } from 'react-native';
 import axios from 'axios';
 import { useTheme } from '../ThemeContext';
+import { useAuth } from '../AuthContext';
 
-export default function LoginScreen({ navigation, onLogin }) {
+export default function LoginScreen({ navigation }) {
   const { accentColor, backgroundColor } = useTheme();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -27,7 +29,7 @@ export default function LoginScreen({ navigation, onLogin }) {
       const res = await axios.post('/auth/login', { email, password });
       console.log('Login response:', res.data);
       if (res.data && res.data.user) {
-        onLogin(res.data.user);
+        await login(res.data.user, res.data.token);
       } else {
         const errorMsg = 'Invalid response from server';
         setError(errorMsg);

@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, StyleSheet, Alert, TouchableOpacity, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import axios from 'axios';
 import { useTheme } from '../ThemeContext';
+import { useAuth } from '../AuthContext';
 
-export default function RegisterScreen({ navigation, onLogin }) {
+export default function RegisterScreen({ navigation }) {
   const { accentColor, backgroundColor } = useTheme();
+  const { login } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -28,8 +30,8 @@ export default function RegisterScreen({ navigation, onLogin }) {
       const res = await axios.post('/auth/register', { name, email, password });
       console.log('Registration response:', res.data);
       // Automatically log in the user after successful registration
-      if (onLogin && res.data && res.data.user) {
-        onLogin(res.data.user);
+      if (res.data && res.data.user) {
+        await login(res.data.user, res.data.token);
       } else {
         Alert.alert('Success', 'Registration complete. You can now log in.');
         navigation.goBack();

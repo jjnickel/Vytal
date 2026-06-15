@@ -5,9 +5,11 @@ import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../ThemeContext';
 import { useWorkout } from '../WorkoutContext';
 import { useNutritionGoals } from '../NutritionGoalsContext';
+import { useAuth } from '../AuthContext';
 
 export default function ProfileScreen({ user }) {
   const { accentColor, setAccentColor, accentColors, backgroundColor, setBackgroundColor, backgroundColors } = useTheme();
+  const { logout } = useAuth();
   const { pastWorkouts } = useWorkout();
   const { goals, updateGoals } = useNutritionGoals();
   const navigation = useNavigation();
@@ -27,7 +29,7 @@ export default function ProfileScreen({ user }) {
       'Are you sure you want to logout?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Logout', style: 'destructive', onPress: () => {/* Implement logout */} },
+        { text: 'Logout', style: 'destructive', onPress: logout },
       ]
     );
   };
